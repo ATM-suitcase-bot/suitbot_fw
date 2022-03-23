@@ -3,6 +3,9 @@
 //Joystick analog pins for teleoperation
 int joyX = A0;
 int joyY = A1;
+int pressure1 = A2;
+int pressure2 = A3;
+int voltageSense = A4;
 
 //Motor 1/2 PWN and DIR inputs
 int m1PWM = 10;
