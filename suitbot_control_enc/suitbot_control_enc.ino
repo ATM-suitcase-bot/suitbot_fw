@@ -51,7 +51,7 @@ float velocity_byte = 0.0;
 
 void setup() {
   //9600 baud serial comms
-  Serial.begin(115200);
+  Serial.begin(57600);
 
   //Init pinmodes Input/Output
   pinMode(joyX, INPUT);
@@ -91,9 +91,18 @@ void loop() {
     int split_ind = in_str.indexOf('\t');
     String first_str = in_str.substring(0, split_ind);
     String last_str = in_str.substring(split_ind+1);
-    
-    velocity_byte = atof(first_str.toCharArray());
-    angular_byte = atof(last_str.toCharArray());
+    char first_char_arr[first_str.length()+1];
+    char last_char_arr[last_str.length()+1];
+    first_str.toCharArray(first_char_arr, sizeof(first_char_arr));
+    velocity_byte = atof(first_char_arr);
+    Serial.print("data\t");
+    Serial.print(String(0));
+    Serial.print("\t");
+    Serial.print(String(0));
+    Serial.print("\t");
+    Serial.println(String(velocity_byte));
+    last_str.toCharArray(last_char_arr, sizeof(last_char_arr));
+    angular_byte = atof(last_char_arr);
   }
 
   //Calculated left and right wheel powers based on reading
@@ -121,16 +130,26 @@ void loop() {
   analogWrite(m1PWM, left_pow);
   analogWrite(m2PWM, right_pow);
 
+  long microsec = micros();
   //Serial output encoder values- at most every 10 ms
-  if(micros() - last_time > 10000){
+  if(microsec - last_time > 10000){
     int diff_1 = counterM1 - last_c1;
     int diff_2 = counterM2 - last_c2;
     float dt = (micros() - last_time)/1000000;
     float v_x = float(diff_1 + diff_2)/dt;
     float a_v_z = float(diff_1 - diff_2)/dt;
-    int t_sec = floor(micros()/1000000);
-    int t_nano = 1000*(micros % 1000000);
-    Serial.println("encoder" + "\t" + String(t_sec) + "\t" + String(t_nano) + "\t" + String(v_x) + "\t" + String(a_v_z));
+    unsigned long microsec_u = (unsigned long)microsec;
+    unsigned int t_sec = floor(microsec_u / 1000000);
+    unsigned int t_nano = (microsec_u % 1000000) * 1000;
+    Serial.print("encoder");
+    Serial.print("\t");
+    Serial.print(String(t_sec));
+    Serial.print("\t");
+    Serial.print(String(t_nano));
+    Serial.print("\t");
+    Serial.print(String(v_x));
+    Serial.print("\t");
+    Serial.println(String(a_v_z));
   
     //log prvious encoder vals
     last_c1 = counterM1;
