@@ -46,8 +46,8 @@ int last_c2 = 0;
 float v_forward = 0.0;
 float v_angular = 0.0;
 
-int angular_byte = 0;
-int velocity_byte = 0;
+float angular_byte = 0.0;
+float velocity_byte = 0.0;
 
 void setup() {
   //9600 baud serial comms
@@ -85,9 +85,15 @@ void loop() {
   int y_val = analogRead(joyY);
   int voltage_val = analogRead(voltageSense);
 
-  if (Serial.available() > 1) { //at least 2 bytes inputted
-    velocity_byte = Serial.read();
-    angular_byte = Serial.read();
+  if (Serial.available() > 0) { //at least 2 bytes inputted
+    String in_str = Serial.readString();
+
+    int split_ind = in_str.indexOf('\t');
+    String first_str = in_str.substring(0, split_ind);
+    String last_str = in_str.substring(split_ind+1);
+    
+    velocity_byte = atof(first_str.toCharArray());
+    angular_byte = atof(last_str.toCharArray());
   }
 
   //Calculated left and right wheel powers based on reading
