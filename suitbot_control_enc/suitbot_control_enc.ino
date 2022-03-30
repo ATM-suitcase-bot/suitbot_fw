@@ -47,10 +47,10 @@ long counterM2 = 0;
 float p = 0.01;
 float d = 0.01;
 
-long last_time = micros();
+long last_time = micros();l
 long last_time_voltage = micros();
 
-float enc_2_m = 0.001; //encoder tick to meter travel conversion
+float enc_2_m = 0.0007; //encoder tick to meter travel conversion
 float wb_m = 0.17; //wheelbase in meters
 
 int last_c1 = 0;
@@ -66,7 +66,7 @@ float linear_v_cmd = 0.0;
 float angular_v_cmd = 0.0;
 
 void setup() {
-  //9600 baud serial comms
+  //57600 baud serial comms
   Serial.begin(57600);
 
   //Init pinmodes Input/Output
@@ -133,7 +133,7 @@ void loop() {
   }
   // If no command is received, we proceed with the joystick command
   
-  //Calculated left and right wheel powers based on reading
+  //Calculated left and right wheel powers based on analog joystick reading
   /*float left_out = float(y_val-neu_val) - float(x_val-neu_val)/2;
   float right_out = float(y_val-neu_val) + float(x_val-neu_val)/2;
   left_out = left_out / 1600.0;
@@ -172,7 +172,7 @@ void loop() {
   if(microsec - last_time > 10000){
     int diff_1 = counterM1 - last_c1;
     int diff_2 = counterM2 - last_c2;
-    float dt = (micros() - last_time)/1000000;
+    float dt = float(micros() - last_time)/1000000.0;
     float v_x = float(diff_1 + diff_2)/dt;
     float a_v_z = float(diff_1 - diff_2)/dt;
     String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
@@ -207,8 +207,6 @@ void loop() {
   //Log previous power output values
   last_l = left_out;
   last_r = right_out;
-
-  
 }
 
 //Callback functions for reading encoders
