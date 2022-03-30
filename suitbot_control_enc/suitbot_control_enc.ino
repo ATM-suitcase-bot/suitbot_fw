@@ -1,4 +1,15 @@
-//A simple script for manual control and mobility development
+/*
+ * Main firmware for the Suitbot
+ * 
+ * 1) Receives velocity commands from the central computer
+ * 2) Controls the motors using the velocity commands
+ * 3) Sends current encoder readings (velocity) and force reading to the computer
+ * 4) Reads battery voltage and sends the value to the computer
+ */
+
+#define MAX_VOLTAGE 14.7
+
+#define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
 //Joystick analog pins for teleoperation
 int joyX = A0;
@@ -37,6 +48,8 @@ float p = 0.01;
 float d = 0.01;
 
 long last_time = micros();
+long last_time_voltage = micros();
+
 float enc_2_m = 0.001; //encoder tick to meter travel conversion
 float wb_m = 0.17; //wheelbase in meters
 
@@ -49,6 +62,9 @@ float v_angular = 0.0;
 float angular_byte = 0.0;
 float velocity_byte = 0.0;
 
+float linear_v_cmd = 0.0;
+float angular_v_cmd = 0.0;
+
 void setup() {
   //9600 baud serial comms
   Serial.begin(57600);
@@ -56,6 +72,8 @@ void setup() {
   //Init pinmodes Input/Output
   pinMode(joyX, INPUT);
   pinMode(joyY, INPUT);
+
+  pinMode(voltageSense, INPUT);
 
   pinMode(m1PWM, OUTPUT);
   pinMode(m2PWM, OUTPUT);
@@ -85,32 +103,42 @@ void loop() {
   int y_val = analogRead(joyY);
   int voltage_val = analogRead(voltageSense);
 
-  if (Serial.available() > 0) { //at least 2 bytes inputted
-    String in_str = Serial.readString();
+  if (Serial.available() > 0) { //received velocity command from nuc
+    // format: "a\tb"
+    // where a is linear velocity and b is angular velocity
+    String strIn = Serial.readString(); 
 
-    int split_ind = in_str.indexOf('\t');
-    String first_str = in_str.substring(0, split_ind);
-    String last_str = in_str.substring(split_ind+1);
-    char first_char_arr[first_str.length()+1];
-    char last_char_arr[last_str.length()+1];
-    first_str.toCharArray(first_char_arr, sizeof(first_char_arr));
-    velocity_byte = atof(first_char_arr);
-    Serial.print("data\t");
-    Serial.print(String(0));
-    Serial.print("\t");
-    Serial.print(String(0));
-    Serial.print("\t");
-    Serial.println(String(velocity_byte));
-    last_str.toCharArray(last_char_arr, sizeof(last_char_arr));
-    angular_byte = atof(last_char_arr);
+    /* Process received string */
+    int n = strIn.length();
+    char char_array[n + 1];
+    strcpy(char_array, strIn.c_str());
+    char * pch;
+    pch = strtok(char_array,"\t");
+    if (pch != NULL)
+    {
+      String x1_str(pch);
+      linear_v_cmd = x1_str.toFloat();
+      pch = strtok(NULL, "\t");
+      if (pch != NULL)
+      {
+        String x2_str(pch);
+        angular_v_cmd = x2_str.toFloat();
+      }
+    }
+
+    // map velocity to [-500, 500]
+    velocity_byte = linear_v_cmd * 500;
+    angular_byte = angular_v_cmd * 500;
+    
   }
-
+  // If no command is received, we proceed with the joystick command
+  
   //Calculated left and right wheel powers based on reading
   /*float left_out = float(y_val-neu_val) - float(x_val-neu_val)/2;
   float right_out = float(y_val-neu_val) + float(x_val-neu_val)/2;
   left_out = left_out / 1600.0;
   right_out = right_out / 1600.0;*/
-
+  
   float left_out = (float(velocity_byte) - float(angular_byte)/2.0)/600.0;
   float right_out = (float(velocity_byte) + float(angular_byte)/2.0)/600.0;
 
@@ -131,6 +159,15 @@ void loop() {
   analogWrite(m2PWM, right_pow);
 
   long microsec = micros();
+  unsigned long microsec_u = (unsigned long)microsec;
+  unsigned int t_sec = floor(microsec_u / 1000000);
+  unsigned int t_nano = (microsec_u % 1000000) * 1000;
+
+  // for debugging, send the velocity cmd back to pc
+  String data_str = "data\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+
+                  String(linear_v_cmd, 8)+"\t"+String(angular_v_cmd,8);
+  Serial.println(data_str);
+  
   //Serial output encoder values- at most every 10 ms
   if(microsec - last_time > 10000){
     int diff_1 = counterM1 - last_c1;
@@ -138,18 +175,9 @@ void loop() {
     float dt = (micros() - last_time)/1000000;
     float v_x = float(diff_1 + diff_2)/dt;
     float a_v_z = float(diff_1 - diff_2)/dt;
-    unsigned long microsec_u = (unsigned long)microsec;
-    unsigned int t_sec = floor(microsec_u / 1000000);
-    unsigned int t_nano = (microsec_u % 1000000) * 1000;
-    Serial.print("encoder");
-    Serial.print("\t");
-    Serial.print(String(t_sec));
-    Serial.print("\t");
-    Serial.print(String(t_nano));
-    Serial.print("\t");
-    Serial.print(String(v_x));
-    Serial.print("\t");
-    Serial.println(String(a_v_z));
+    String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
+                               String(v_x)+"\t"+String(a_v_z);
+    Serial.println(enc_str);
   
     //log prvious encoder vals
     last_c1 = counterM1;
@@ -162,6 +190,16 @@ void loop() {
     last_c2 = counterM2;
   }
 
+  if(microsec - last_time_voltage > 1000000){ // report battery value every 1s
+    int sensorValue = analogRead(A0);
+    float voltage = float(sensorValue) * (MAX_VOLTAGE / 1023.0);
+    String voltage_str = "voltage\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
+                                          String(voltage, 4);
+    last_time_voltage = micros();
+  }
+  else if (micros() < last_time_voltage){ // handle overflow
+    last_time_voltage = micros();
+  }
   
   //avoid long delays for encoder callback purposes
   delayMicroseconds(100);
