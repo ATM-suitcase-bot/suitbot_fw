@@ -41,14 +41,10 @@ float last_l = 0.0;
 float last_r = 0.0;
 
 //Factor defining degree to which motion is smoothed
-float smooth_k = 0.9;
+float smooth_k = 0.99;
 
 long counterM1 = 0;
 long counterM2 = 0;
-
-//PD constants for velocity control
-float p = 0.01;
-float d = 0.01;
 
 long last_time = micros();
 long last_time_voltage = micros();
@@ -65,14 +61,22 @@ float v_angular = 0.0;
 float angular_in = 0.0;
 float velocity_in = 0.0;
 
-float k_p = 0.01;
-float k_d = 0.001;
+//PD constants for velocity control
+float k_p = 1.5;
+float k_i = 0.04;
+float k_d = 0.0;
 
 float last_error_v = 0.0;
 float last_error_ang = 0.0;
 
+float int_error_v = 0.0;
+float int_error_ang = 0.0;
+
 //float linear_v_cmd = 0.0;
 //float angular_v_cmd = 0.0;
+
+float left_out = 0.0;
+float right_out = 0.0;
 
 void setup() {
   //57600 baud serial comms
@@ -136,32 +140,22 @@ void loop() {
     }
 
     // map velocity to [-500, 500]
-    velocity_byte = linear_v_cmd * 500;
-    angular_byte = angular_v_cmd * 500;
     
   }*/
-  velocity_in = 0.0;
-  angular_in = 0.0;
-  // If no command is received, we proceed with the joystick command
-  
-  //Calculated left and right wheel powers based on analog joystick reading
-  /*float left_out = float(y_val-neu_val) - float(x_val-neu_val)/2;
-  float right_out = float(y_val-neu_val) + float(x_val-neu_val)/2;
-  left_out = left_out / 1600.0;
-  right_out = right_out / 1600.0;*/
-  
-  float left_out = (float(velocity_in) - float(angular_in)/2.0)/600.0;
-  float right_out = (float(velocity_in) + float(angular_in)/2.0)/600.0;
+  velocity_in = 0.2;
+  angular_in = 0.2;
 
   //Apply smoothing (anti-jerk control) to motor outputs
-  left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
-  right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
+  float power_left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
+  float power_right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
 
   //Convert floats to PWM power and boolean direction
-  int left_pow = int(abs(left_out)*255);
-  int right_pow = int(abs(right_out)*255);
-  bool left_dir = left_out > 0;
-  bool right_dir = right_out < 0;
+  power_left_out = min(max(power_left_out, -1.0), 1.0);
+  power_right_out = min(max(power_right_out, -1.0), 1.0);
+  int left_pow = int(abs(power_left_out)*255);
+  int right_pow = int(abs(power_right_out)*255);
+  bool left_dir = power_left_out > 0;
+  bool right_dir = power_right_out < 0;
 
   //Write motor powers
   digitalWrite(m1DIR, left_dir);
@@ -179,21 +173,48 @@ void loop() {
   //                String(linear_v_cmd, 8)+"\t"+String(angular_v_cmd,8);
   //Serial.println(data_str);
   
-  //Serial output encoder values- at most every 10 ms
+  //Serial output encoder values- at most every 100 ms
   if(microsec - last_time > ENC_REPORT_TIME){
     int diff_1 = counterM1 - last_c1;
     int diff_2 = counterM2 - last_c2;
     float dt = float(micros() - last_time)/float(MS_2_S);
-    float v_x = float(diff_1 + diff_2)*enc_2_m/dt;
+    float v_x = float(diff_1 + diff_2)*enc_2_m*2/(dt);
     float a_v_z = float(diff_1 - diff_2)*enc_2_m/(dt*wb_m);
-    String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
-                               String(v_x)+"\t"+String(a_v_z);
-    Serial.println(enc_str);
+    
 
-    //log prvious encoder vals
+    //log previous encoder vals
     last_c1 = counterM1;
     last_c2 = counterM2;
     last_time = micros();
+
+    //Calculate error on velocity and angular commands
+    float error_v = velocity_in - v_x;
+    float error_ang = angular_in - a_v_z;
+
+    //Calculate power based on errors and derivative of errors
+    float power_v = -1*(error_v*k_p+(error_v-last_error_v)/dt*k_d);
+    power_v = power_v - int_error_v*k_i;
+    float power_ang = -1*(error_ang*k_p+(error_ang-last_error_ang)/dt*k_d);
+    power_ang = power_ang - int_error_ang*k_i;
+
+    //PID constants should be reduced for radial control
+    power_ang = power_ang/4.0;
+
+    left_out = power_v + power_ang;
+    right_out = power_v - power_ang;
+
+    last_error_v = error_v;
+    last_error_ang = error_ang;
+
+    //accumulate but remove windup on integral terms
+    int_error_v = int_error_v + error_v;
+    int_error_v = min(max(int_error_v, -20), 20);
+    int_error_ang = int_error_ang + error_ang;
+    int_error_ang = min(max(int_error_ang, -20), 20);
+
+    String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
+                               String(v_x)+"\t"+String(a_v_z);
+    Serial.println(enc_str);
   }
   else if(micros() < last_time){ //Reset all counters upon overflow
     last_time = micros();
@@ -216,8 +237,8 @@ void loop() {
   delayMicroseconds(100);
   
   //Log previous power output values
-  last_l = left_out;
-  last_r = right_out;
+  last_l = power_left_out;
+  last_r = power_right_out;
 }
 
 //Callback functions for reading encoders
