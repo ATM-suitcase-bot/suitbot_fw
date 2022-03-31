@@ -7,7 +7,7 @@
  * 4) Reads battery voltage and sends the value to the computer
  */
 
-#define MAX_VOLTAGE 14.7
+#define MAX_VOLTAGE 25.0
 #define ENC_REPORT_TIME 100000
 #define BAT_REPORT_TIME 1000000
 #define MS_2_S 1000000
@@ -72,15 +72,13 @@ float last_error_ang = 0.0;
 float int_error_v = 0.0;
 float int_error_ang = 0.0;
 
-//float linear_v_cmd = 0.0;
-//float angular_v_cmd = 0.0;
-
 float left_out = 0.0;
 float right_out = 0.0;
 
 void setup() {
   //57600 baud serial comms
-  Serial.begin(57600);
+  Serial.setTimeout(50);
+  Serial.begin(115200);
 
   //Init pinmodes Input/Output
   pinMode(joyX, INPUT);
@@ -116,12 +114,12 @@ void loop() {
   int y_val = analogRead(joyY);
   int voltage_val = analogRead(voltageSense);
 
-  /*if (Serial.available() > 0) { //received velocity command from nuc
+  if (Serial.available() > 0) { //received velocity command from nuc
     // format: "a\tb"
     // where a is linear velocity and b is angular velocity
     String strIn = Serial.readString(); 
 
-    Process received string
+    // Process received string
     int n = strIn.length();
     char char_array[n + 1];
     strcpy(char_array, strIn.c_str());
@@ -130,20 +128,16 @@ void loop() {
     if (pch != NULL)
     {
       String x1_str(pch);
-      linear_v_cmd = x1_str.toFloat();
+      velocity_in = x1_str.toFloat();
       pch = strtok(NULL, "\t");
       if (pch != NULL)
       {
         String x2_str(pch);
-        angular_v_cmd = x2_str.toFloat();
+        angular_in = x2_str.toFloat();
       }
     }
-
-    // map velocity to [-500, 500]
     
-  }*/
-  velocity_in = 0.2;
-  angular_in = 0.2;
+  }
 
   //Apply smoothing (anti-jerk control) to motor outputs
   float power_left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
@@ -227,6 +221,7 @@ void loop() {
     float voltage = float(sensorValue) * (MAX_VOLTAGE / 1023.0);
     String voltage_str = "voltage\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
                                           String(voltage, 4);
+    Serial.println(voltage_str);
     last_time_voltage = micros();
   }
   else if (micros() < last_time_voltage){ // handle overflow
