@@ -8,6 +8,9 @@
  */
 
 #define MAX_VOLTAGE 14.7
+#define ENC_REPORT_TIME 100000
+#define BAT_REPORT_TIME 1000000
+#define MS_2_S 1000000
 
 #define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
@@ -47,7 +50,7 @@ long counterM2 = 0;
 float p = 0.01;
 float d = 0.01;
 
-long last_time = micros();l
+long last_time = micros();
 long last_time_voltage = micros();
 
 float enc_2_m = 0.0007; //encoder tick to meter travel conversion
@@ -59,11 +62,17 @@ int last_c2 = 0;
 float v_forward = 0.0;
 float v_angular = 0.0;
 
-float angular_byte = 0.0;
-float velocity_byte = 0.0;
+float angular_in = 0.0;
+float velocity_in = 0.0;
 
-float linear_v_cmd = 0.0;
-float angular_v_cmd = 0.0;
+float k_p = 0.01;
+float k_d = 0.001;
+
+float last_error_v = 0.0;
+float last_error_ang = 0.0;
+
+//float linear_v_cmd = 0.0;
+//float angular_v_cmd = 0.0;
 
 void setup() {
   //57600 baud serial comms
@@ -103,12 +112,12 @@ void loop() {
   int y_val = analogRead(joyY);
   int voltage_val = analogRead(voltageSense);
 
-  if (Serial.available() > 0) { //received velocity command from nuc
+  /*if (Serial.available() > 0) { //received velocity command from nuc
     // format: "a\tb"
     // where a is linear velocity and b is angular velocity
     String strIn = Serial.readString(); 
 
-    /* Process received string */
+    Process received string
     int n = strIn.length();
     char char_array[n + 1];
     strcpy(char_array, strIn.c_str());
@@ -130,7 +139,9 @@ void loop() {
     velocity_byte = linear_v_cmd * 500;
     angular_byte = angular_v_cmd * 500;
     
-  }
+  }*/
+  velocity_in = 0.0;
+  angular_in = 0.0;
   // If no command is received, we proceed with the joystick command
   
   //Calculated left and right wheel powers based on analog joystick reading
@@ -139,8 +150,8 @@ void loop() {
   left_out = left_out / 1600.0;
   right_out = right_out / 1600.0;*/
   
-  float left_out = (float(velocity_byte) - float(angular_byte)/2.0)/600.0;
-  float right_out = (float(velocity_byte) + float(angular_byte)/2.0)/600.0;
+  float left_out = (float(velocity_in) - float(angular_in)/2.0)/600.0;
+  float right_out = (float(velocity_in) + float(angular_in)/2.0)/600.0;
 
   //Apply smoothing (anti-jerk control) to motor outputs
   left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
@@ -159,26 +170,26 @@ void loop() {
   analogWrite(m2PWM, right_pow);
 
   long microsec = micros();
-  unsigned long microsec_u = (unsigned long)microsec;
-  unsigned int t_sec = floor(microsec_u / 1000000);
-  unsigned int t_nano = (microsec_u % 1000000) * 1000;
+  //long microsec_u = (unsigned long)microsec;
+  int t_sec = floor(microsec / MS_2_S);
+  long t_nano = long(microsec%MS_2_S)*1000;
 
   // for debugging, send the velocity cmd back to pc
-  String data_str = "data\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+
-                  String(linear_v_cmd, 8)+"\t"+String(angular_v_cmd,8);
-  Serial.println(data_str);
+  //String data_str = "data\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+
+  //                String(linear_v_cmd, 8)+"\t"+String(angular_v_cmd,8);
+  //Serial.println(data_str);
   
   //Serial output encoder values- at most every 10 ms
-  if(microsec - last_time > 10000){
+  if(microsec - last_time > ENC_REPORT_TIME){
     int diff_1 = counterM1 - last_c1;
     int diff_2 = counterM2 - last_c2;
-    float dt = float(micros() - last_time)/1000000.0;
-    float v_x = float(diff_1 + diff_2)/dt;
-    float a_v_z = float(diff_1 - diff_2)/dt;
+    float dt = float(micros() - last_time)/float(MS_2_S);
+    float v_x = float(diff_1 + diff_2)*enc_2_m/dt;
+    float a_v_z = float(diff_1 - diff_2)*enc_2_m/(dt*wb_m);
     String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
                                String(v_x)+"\t"+String(a_v_z);
     Serial.println(enc_str);
-  
+
     //log prvious encoder vals
     last_c1 = counterM1;
     last_c2 = counterM2;
@@ -190,7 +201,7 @@ void loop() {
     last_c2 = counterM2;
   }
 
-  if(microsec - last_time_voltage > 1000000){ // report battery value every 1s
+  if(microsec - last_time_voltage > BAT_REPORT_TIME){ // report battery value every 1s
     int sensorValue = analogRead(A0);
     float voltage = float(sensorValue) * (MAX_VOLTAGE / 1023.0);
     String voltage_str = "voltage\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
