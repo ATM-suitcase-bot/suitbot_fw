@@ -173,7 +173,7 @@ void loop() {
     int diff_2 = counterM2 - last_c2;
     float dt = float(micros() - last_time)/float(MS_2_S);
     float v_x = float(diff_1 + diff_2)*enc_2_m*2/(dt);
-    float a_v_z = float(diff_1 - diff_2)*enc_2_m/(dt*wb_m);
+    float a_v_z = float(diff_1 - diff_2)*enc_2_m*2/(dt*wb_m);
     
 
     //log previous encoder vals
