@@ -169,6 +169,11 @@ void loop() {
   
   //Serial output encoder values- at most every 100 ms
   if(microsec - last_time > ENC_REPORT_TIME){
+
+    float force1 = float(analogRead(pressure1)) * 50.0 / 1023.0;
+    float force2 = float(analogRead(pressure2)) * 50.0 / 1023.0;
+    
+    
     int diff_1 = counterM1 - last_c1;
     int diff_2 = counterM2 - last_c2;
     float dt = float(micros() - last_time)/float(MS_2_S);
@@ -209,6 +214,10 @@ void loop() {
     String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
                                String(v_x)+"\t"+String(a_v_z);
     Serial.println(enc_str);
+
+    String force_str = "force\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
+                               String(force1, 4)+"\t"+String(force2, 4);
+    Serial.println(force_str);
   }
   else if(micros() < last_time){ //Reset all counters upon overflow
     last_time = micros();
