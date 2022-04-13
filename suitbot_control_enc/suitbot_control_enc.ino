@@ -14,6 +14,10 @@
 
 #define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
+#define AUTONOMOUS 0
+#define MANUAL 1
+#define DEBUG 2
+
 //Joystick analog pins for teleoperation
 int joyX = A0;
 int joyY = A1;
@@ -75,7 +79,12 @@ float int_error_ang = 0.0;
 float left_out = 0.0;
 float right_out = 0.0;
 
+bool is_debugging = false;
+
+int mode = AUTONOMOUS;
+
 void setup() {
+  mode = AUTONOMOUS;
   //57600 baud serial comms
   Serial.setTimeout(50);
   Serial.begin(115200);
@@ -109,9 +118,6 @@ void setup() {
 }
 
 void loop() {
-  //Get joystick values (useful only in teleoperation mode)
-  int x_val = analogRead(joyX);
-  int y_val = analogRead(joyY);
   int voltage_val = analogRead(voltageSense);
 
   if (Serial.available() > 0) { //received velocity command from nuc
@@ -134,39 +140,63 @@ void loop() {
       {
         String x2_str(pch);
         angular_in = x2_str.toFloat();
+        pch = strtok(NULL, "\t");
+        if (pch != NULL)
+        {
+          String x3_str(pch);
+          int mode_in = x3_str.toInt();
+          if (mode_in == 1) {
+            if (mode == AUTONOMOUS){
+              reset_params(MANUAL);
+            }
+          }
+          else if (mode == 0) {
+            if (mode == MANUAL){
+              reset_params(AUTONOMOUS);
+            }
+          }
+        }
+        
       }
     }
     
   }
 
-  //Apply smoothing (anti-jerk control) to motor outputs
-  float power_left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
-  float power_right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
+  if (mode == AUTONOMOUS) {
+    //Apply smoothing (anti-jerk control) to motor outputs
+    float power_left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
+    float power_right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
+  
+    //Convert floats to PWM power and boolean direction
+    power_left_out = min(max(power_left_out, -1.0), 1.0);
+    power_right_out = min(max(power_right_out, -1.0), 1.0);
+    int left_pow = int(abs(power_left_out)*255);
+    int right_pow = int(abs(power_right_out)*255);
+    bool left_dir = power_left_out > 0;
+    bool right_dir = power_right_out < 0;
+  
+    //Write motor powers
+    digitalWrite(m1DIR, left_dir);
+    digitalWrite(m2DIR, right_dir);
+    analogWrite(m1PWM, left_pow);
+    analogWrite(m2PWM, right_pow);
 
-  //Convert floats to PWM power and boolean direction
-  power_left_out = min(max(power_left_out, -1.0), 1.0);
-  power_right_out = min(max(power_right_out, -1.0), 1.0);
-  int left_pow = int(abs(power_left_out)*255);
-  int right_pow = int(abs(power_right_out)*255);
-  bool left_dir = power_left_out > 0;
-  bool right_dir = power_right_out < 0;
+    //Log previous power output values
+    last_l = power_left_out;
+    last_r = power_right_out;
+  }
+  else if (mode == MANUAL) {
+    teleop_control();
+  }
 
-  //Write motor powers
-  digitalWrite(m1DIR, left_dir);
-  digitalWrite(m2DIR, right_dir);
-  analogWrite(m1PWM, left_pow);
-  analogWrite(m2PWM, right_pow);
 
+  /* Report sensor values to PC */
   long microsec = micros();
   //long microsec_u = (unsigned long)microsec;
   int t_sec = floor(microsec / MS_2_S);
   long t_nano = long(microsec%MS_2_S)*1000;
 
-  // for debugging, send the velocity cmd back to pc
-  //String data_str = "data\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+
-  //                String(linear_v_cmd, 8)+"\t"+String(angular_v_cmd,8);
-  //Serial.println(data_str);
-  
+    
   //Serial output encoder values- at most every 100 ms
   if(microsec - last_time > ENC_REPORT_TIME){
 
@@ -179,37 +209,11 @@ void loop() {
     float dt = float(micros() - last_time)/float(MS_2_S);
     float v_x = float(diff_1 + diff_2)*enc_2_m*2/(dt);
     float a_v_z = float(diff_1 - diff_2)*enc_2_m*2/(dt*wb_m);
-    
 
     //log previous encoder vals
     last_c1 = counterM1;
     last_c2 = counterM2;
     last_time = micros();
-
-    //Calculate error on velocity and angular commands
-    float error_v = velocity_in - v_x;
-    float error_ang = angular_in - a_v_z;
-
-    //Calculate power based on errors and derivative of errors
-    float power_v = -1*(error_v*k_p+(error_v-last_error_v)/dt*k_d);
-    power_v = power_v - int_error_v*k_i;
-    float power_ang = -1*(error_ang*k_p+(error_ang-last_error_ang)/dt*k_d);
-    power_ang = power_ang - int_error_ang*k_i;
-
-    //PID constants should be reduced for radial control
-    power_ang = power_ang/4.0;
-
-    left_out = power_v + power_ang;
-    right_out = power_v - power_ang;
-
-    last_error_v = error_v;
-    last_error_ang = error_ang;
-
-    //accumulate but remove windup on integral terms
-    int_error_v = int_error_v + error_v;
-    int_error_v = min(max(int_error_v, -20), 20);
-    int_error_ang = int_error_ang + error_ang;
-    int_error_ang = min(max(int_error_ang, -20), 20);
 
     String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
                                String(v_x)+"\t"+String(a_v_z);
@@ -218,6 +222,34 @@ void loop() {
     String force_str = "force\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
                                String(force1, 4)+"\t"+String(force2, 4);
     Serial.println(force_str);
+    
+    if (mode == AUTONOMOUS){
+  
+      //Calculate error on velocity and angular commands
+      float error_v = velocity_in - v_x;
+      float error_ang = angular_in - a_v_z;
+  
+      //Calculate power based on errors and derivative of errors
+      float power_v = -1*(error_v*k_p+(error_v-last_error_v)/dt*k_d);
+      power_v = power_v - int_error_v*k_i;
+      float power_ang = -1*(error_ang*k_p+(error_ang-last_error_ang)/dt*k_d);
+      power_ang = power_ang - int_error_ang*k_i;
+  
+      //PID constants should be reduced for radial control
+      power_ang = power_ang/4.0;
+  
+      left_out = power_v + power_ang;
+      right_out = power_v - power_ang;
+  
+      last_error_v = error_v;
+      last_error_ang = error_ang;
+  
+      //accumulate but remove windup on integral terms
+      int_error_v = int_error_v + error_v;
+      int_error_v = min(max(int_error_v, -20), 20);
+      int_error_ang = int_error_ang + error_ang;
+      int_error_ang = min(max(int_error_ang, -20), 20);
+    }
   }
   else if(micros() < last_time){ //Reset all counters upon overflow
     last_time = micros();
@@ -239,10 +271,6 @@ void loop() {
   
   //avoid long delays for encoder callback purposes
   delayMicroseconds(100);
-  
-  //Log previous power output values
-  last_l = power_left_out;
-  last_r = power_right_out;
 }
 
 //Callback functions for reading encoders
@@ -262,4 +290,87 @@ void encM2(){
   else{
     counterM2--;
   }
+}
+
+void teleop_control() {
+  //Get joystick values (useful only in teleoperation mode)
+  int x_val = analogRead(joyX);
+  int y_val = analogRead(joyY);
+  
+  float left_out = float(y_val-neu_val) - float(x_val-neu_val)/3;
+  float right_out = float(y_val-neu_val) + float(x_val-neu_val)/3;
+
+  left_out = left_out / 1800.0;
+  right_out = right_out / 1800.0;
+
+  left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
+  right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
+
+  int left_pow = int(abs(left_out)*255);
+  int right_pow = int(abs(right_out)*255);
+
+  bool left_dir = left_out > 0;
+  bool right_dir = right_out < 0;
+
+  digitalWrite(m1DIR, left_dir);
+  digitalWrite(m2DIR, right_dir);
+
+  analogWrite(m1PWM, left_pow);
+  analogWrite(m2PWM, right_pow);
+
+  //delay(20);
+
+  last_l = left_out;
+  last_r = right_out;
+}
+
+void debug_control() {
+  float left_out = 0.5;
+  float right_out = 0.5;
+
+  left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
+  right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
+
+  int left_pow = int(abs(left_out)*255);
+  int right_pow = int(abs(right_out)*255);
+
+  bool left_dir = left_out > 0;
+  bool right_dir = right_out < 0;
+
+  digitalWrite(m1DIR, left_dir);
+  digitalWrite(m2DIR, right_dir);
+
+  analogWrite(m1PWM, left_pow);
+  analogWrite(m2PWM, right_pow);
+
+  //delay(20);
+
+  last_l = left_out;
+  last_r = right_out;
+}
+
+
+void reset_params(int mode_in){
+  mode = mode_in;
+
+  last_l = 0.0;
+  last_r = 0.0;
+  
+  last_time = micros();
+  last_time_voltage = micros();
+  
+  v_forward = 0.0;
+  v_angular = 0.0;
+  
+  angular_in = 0.0;
+  velocity_in = 0.0;
+  
+  last_error_v = 0.0;
+  last_error_ang = 0.0;
+  
+  int_error_v = 0.0;
+  int_error_ang = 0.0;
+  
+  left_out = 0.0;
+  right_out = 0.0;
 }
