@@ -53,8 +53,8 @@ long counterM2 = 0;
 long last_time = micros();
 long last_time_voltage = micros();
 
-float enc_2_m = 0.0007; //encoder tick to meter travel conversion
-float wb_m = 0.17; //wheelbase in meters
+float enc_2_m = 0.0025;// 0.0007; //encoder tick to meter travel conversion
+float wb_m = 0.23; //wheelbase in meters
 
 int last_c1 = 0;
 int last_c2 = 0;
@@ -207,8 +207,8 @@ void loop() {
     int diff_1 = counterM1 - last_c1;
     int diff_2 = counterM2 - last_c2;
     float dt = float(micros() - last_time)/float(MS_2_S);
-    float v_x = float(diff_1 + diff_2)*enc_2_m*2/(dt);
-    float a_v_z = float(diff_1 - diff_2)*enc_2_m*2/(dt*wb_m);
+    float v_x = float(diff_1 + diff_2)*enc_2_m/(dt);
+    float a_v_z = float(diff_1 - diff_2)*enc_2_m/(dt*wb_m);
 
     //log previous encoder vals
     last_c1 = counterM1;
