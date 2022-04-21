@@ -30,14 +30,15 @@ void setup() {
 }
 
 void loop() {
+
   int x_val = analogRead(joyX);
   int y_val = analogRead(joyY);
 
   float left_out = float(y_val-neu_val) - float(x_val-neu_val)/3;
   float right_out = float(y_val-neu_val) + float(x_val-neu_val)/3;
 
-  left_out = left_out / 1800.0;
-  right_out = right_out / 1800.0;
+  left_out = left_out / 900.0;
+  right_out = right_out / 900.0;
 
   left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
   right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;

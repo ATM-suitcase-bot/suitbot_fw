@@ -11,6 +11,7 @@
 #define ENC_REPORT_TIME 100000
 #define BAT_REPORT_TIME 1000000
 #define MS_2_S 1000000
+#define MIN_POWER 15 //Minimum motor PWM signal (/255)
 
 #define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
@@ -66,8 +67,10 @@ float angular_in = 0.0;
 float velocity_in = 0.0;
 
 //PD constants for velocity control
-float k_p = 1.5;
-float k_i = 0.04;
+//float k_p = 1.5;
+float k_p = 0.5;
+//float k_i = 0.04;
+float k_i = 0.017;
 float k_d = 0.0;
 
 float last_error_v = 0.0;
@@ -176,10 +179,22 @@ void loop() {
     bool right_dir = power_right_out < 0;
   
     //Write motor powers
+    
     digitalWrite(m1DIR, left_dir);
     digitalWrite(m2DIR, right_dir);
-    analogWrite(m1PWM, left_pow);
-    analogWrite(m2PWM, right_pow);
+    
+    //Send 0 instead of extremely small motor power values (avoid squeaking)
+    if(left_pow > MIN_POWER){
+      analogWrite(m1PWM, left_pow);
+    }else{
+      analogWrite(m1PWM, 0);
+    }
+
+    if(right_pow > MIN_POWER){
+      analogWrite(m2PWM, right_pow);
+    }else{
+      analogWrite(m2PWM, 0);
+    }
 
     //Log previous power output values
     last_l = power_left_out;
@@ -325,8 +340,8 @@ void teleop_control() {
 }
 
 void debug_control() {
-  float left_out = 0.5;
-  float right_out = 0.5;
+  float left_out = 0.9;
+  float right_out = 0.9;
 
   left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
   right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;
