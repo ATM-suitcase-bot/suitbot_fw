@@ -11,7 +11,7 @@
 #define ENC_REPORT_TIME 100000
 #define BAT_REPORT_TIME 1000000
 #define MS_2_S 1000000
-#define MIN_POWER 15 //Minimum motor PWM signal (/255)
+#define MIN_POWER 20 //Minimum motor PWM signal (/255)
 
 #define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
@@ -54,8 +54,8 @@ long counterM2 = 0;
 long last_time = micros();
 long last_time_voltage = micros();
 
-float enc_2_m = 0.0025;// 0.0007; //encoder tick to meter travel conversion
-float wb_m = 0.23; //wheelbase in meters
+float enc_2_m = 0.0027;// 0.0007; //encoder tick to meter travel conversion
+float wb_m = 0.18; //wheelbase in meters
 
 int last_c1 = 0;
 int last_c2 = 0;
