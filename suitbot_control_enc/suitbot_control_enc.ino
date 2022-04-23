@@ -11,7 +11,7 @@
 #define ENC_REPORT_TIME 100000
 #define BAT_REPORT_TIME 1000000
 #define MS_2_S 1000000
-#define MIN_POWER 20 //Minimum motor PWM signal (/255)
+#define MIN_POWER 30 //Minimum motor PWM signal (/255)
 
 #define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
@@ -46,7 +46,7 @@ float last_l = 0.0;
 float last_r = 0.0;
 
 //Factor defining degree to which motion is smoothed
-float smooth_k = 0.99;
+float smooth_k = 0.995;
 
 long counterM1 = 0;
 long counterM2 = 0;
@@ -54,7 +54,7 @@ long counterM2 = 0;
 long last_time = micros();
 long last_time_voltage = micros();
 
-float enc_2_m = 0.0027;// 0.0007; //encoder tick to meter travel conversion
+float enc_2_m = 0.00196;// 0.0007; //encoder tick to meter travel conversion
 float wb_m = 0.18; //wheelbase in meters
 
 int last_c1 = 0;
@@ -68,9 +68,9 @@ float velocity_in = 0.0;
 
 //PD constants for velocity control
 //float k_p = 1.5;
-float k_p = 0.5;
+float k_p = 0.85;
 //float k_i = 0.04;
-float k_i = 0.017;
+  float k_i = 0.03;
 float k_d = 0.0;
 
 float last_error_v = 0.0;
@@ -142,7 +142,7 @@ void loop() {
       if (pch != NULL)
       {
         String x2_str(pch);
-        angular_in = x2_str.toFloat();
+        angular_in = -1*x2_str.toFloat();
         pch = strtok(NULL, "\t");
         if (pch != NULL)
         {
@@ -196,6 +196,11 @@ void loop() {
       analogWrite(m2PWM, 0);
     }
 
+    if(right_pow <= MIN_POWER && left_pow <= MIN_POWER){
+      int_error_v = 0.0;
+      int_error_ang = 0.0;
+    }
+
     //Log previous power output values
     last_l = power_left_out;
     last_r = power_right_out;
@@ -231,7 +236,7 @@ void loop() {
     last_time = micros();
 
     String enc_str = "encoder\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
-                               String(v_x)+"\t"+String(a_v_z);
+                               String(v_x)+"\t"+String(-1*a_v_z);
     Serial.println(enc_str);
 
     String force_str = "force\t"+String(t_sec)+"\t"+String(t_nano)+"\t"+ 
@@ -261,9 +266,9 @@ void loop() {
   
       //accumulate but remove windup on integral terms
       int_error_v = int_error_v + error_v;
-      int_error_v = min(max(int_error_v, -20), 20);
+      int_error_v = min(max(int_error_v, -50), 50);
       int_error_ang = int_error_ang + error_ang;
-      int_error_ang = min(max(int_error_ang, -20), 20);
+      int_error_ang = min(max(int_error_ang, -50), 50);
     }
   }
   else if(micros() < last_time){ //Reset all counters upon overflow
@@ -315,8 +320,8 @@ void teleop_control() {
   float left_out = float(y_val-neu_val) - float(x_val-neu_val)/3;
   float right_out = float(y_val-neu_val) + float(x_val-neu_val)/3;
 
-  left_out = left_out / 1800.0;
-  right_out = right_out / 1800.0;
+  left_out = left_out / 1400.0;
+  right_out = right_out / 1400.0;
 
   left_out = smooth_k*last_l + (1.0-smooth_k)*left_out;
   right_out = smooth_k*last_r + (1.0-smooth_k)*right_out;

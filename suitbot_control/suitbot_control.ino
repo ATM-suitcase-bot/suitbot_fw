@@ -55,7 +55,11 @@ void loop() {
   analogWrite(m1PWM, left_pow);
   analogWrite(m2PWM, right_pow);
 
-  delay(20);
+  //Serial.println("motor_pwms");
+  //Serial.println(left_out);
+  //Serial.println(right_out);
+
+  delay(200);
 
   last_l = left_out;
   last_r = right_out;
