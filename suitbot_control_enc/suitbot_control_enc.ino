@@ -55,7 +55,7 @@ long last_time = micros();
 long last_time_voltage = micros();
 
 float enc_2_m = 0.00196;// 0.0007; //encoder tick to meter travel conversion
-float wb_m = 0.18; //wheelbase in meters
+float wb_m = 0.12; //wheelbase in meters
 
 int last_c1 = 0;
 int last_c2 = 0;
