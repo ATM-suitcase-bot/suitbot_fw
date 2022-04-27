@@ -11,7 +11,7 @@
 #define ENC_REPORT_TIME 100000
 #define BAT_REPORT_TIME 1000000
 #define MS_2_S 1000000
-#define MIN_POWER 30 //Minimum motor PWM signal (/255)
+#define MIN_POWER 20 //Minimum motor PWM signal (/255)
 
 #define MAX_SPEED 1.0; // max wheel speed. anything greater than this will be capped
 
